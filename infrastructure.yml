@@ -1,0 +1,4 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Infrastructure for mini-ci-cd-project
+Resources:
+  # VPC, Subnets, SecurityGroups, EC2 instances, IAM Roles, etc. to add
