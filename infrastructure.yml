@@ -110,3 +110,89 @@ Resources:
     Properties:
       SubnetId: !Ref UCE_PrivateSubnet
       RouteTableId: !Ref UCE_PrivateRouteTable
+
+
+
+
+  UCE_WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and SSH for Web Server
+      VpcId: !Ref UCE_VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: UCE_WebSecurityGroup
+
+  UCE_DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL only from Web SG
+      VpcId: !Ref UCE_VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref UCE_WebSecurityGroup
+      Tags:
+        - Key: Name
+          Value: UCE_DatabaseSecurityGroup
+
+  UCE_WebEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref UCE_PublicSubnet
+      SecurityGroupIds:
+        - !Ref UCE_WebSecurityGroup
+      ImageId: ami-0c02fb55956c7d316  # Amazon Linux 2 (à adapter selon la région)
+      Tags:
+        - Key: Name
+          Value: UCE_WebEC2
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install php7.4 -y
+          yum install -y httpd git
+          systemctl start httpd
+          systemctl enable httpd
+
+          cd /var/www/html
+          echo "<?php echo '<h1>UCE WebApp OK</h1>'; ?>" > index.php
+
+          chown apache:apache /var/www/html -R
+
+  UCE_DatabaseEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref UCE_PrivateSubnet
+      SecurityGroupIds:
+        - !Ref UCE_DatabaseSecurityGroup
+      ImageId: ami-0c02fb55956c7d316
+      Tags:
+        - Key: Name
+          Value: UCE_DatabaseEC2
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install mariadb-server -y
+          systemctl start mariadb
+          systemctl enable mariadb
+
+          # Create database and sample data
+          mysql -e "CREATE DATABASE uce_db;"
+          mysql -e "USE uce_db; CREATE TABLE messages(id INT PRIMARY KEY AUTO_INCREMENT, content VARCHAR(255));"
+          mysql -e "INSERT INTO messages(content) VALUES ('Hello from UCE Private DB');"
